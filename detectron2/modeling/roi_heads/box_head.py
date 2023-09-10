@@ -31,7 +31,7 @@ class FastRCNNConvFCHead(nn.Sequential):
 
     @configurable
     def __init__(
-        self, input_shape: ShapeSpec, *, conv_dims: List[int], fc_dims: List[int], conv_norm=""
+        self, input_shape: ShapeSpec, *, conv_dims: List[int], fc_dims: List[int], conv_norm="", dropout=None
     ):
         """
         NOTE: this interface is experimental.
@@ -70,6 +70,8 @@ class FastRCNNConvFCHead(nn.Sequential):
             fc = nn.Linear(int(np.prod(self._output_size)), fc_dim)
             self.add_module("fc{}".format(k + 1), fc)
             self.add_module("fc_relu{}".format(k + 1), nn.ReLU())
+            if dropout:
+                self.add_module("fc_dropout{}".format(k + 1), nn.Dropout(dropout))
             self.fcs.append(fc)
             self._output_size = fc_dim
 
@@ -89,6 +91,7 @@ class FastRCNNConvFCHead(nn.Sequential):
             "conv_dims": [conv_dim] * num_conv,
             "fc_dims": [fc_dim] * num_fc,
             "conv_norm": cfg.MODEL.ROI_BOX_HEAD.NORM,
+            "dropout": cfg.MODEL.ROI_BOX_HEAD.DROPOUT,
         }
 
     def forward(self, x):
