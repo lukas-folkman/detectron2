@@ -220,7 +220,17 @@ class DenseDetector(nn.Module):
             num_topk = torch.clamp(topk_idxs_size, max=topk_candidates)
         else:
             num_topk = min(topk_idxs_size, topk_candidates)
+
+        if pred_scores.device.type == 'mps':
+            orig_device = pred_scores.device
+            pred_scores = pred_scores.to('cpu')
+        else:
+            orig_device = None
         pred_scores, idxs = pred_scores.topk(num_topk)
+        if orig_device is not None:
+            pred_scores = pred_scores.to(orig_device) # not use anymore
+            idxs = idxs.to(orig_device)
+
         topk_idxs = topk_idxs[idxs]
 
         anchor_idxs, classes_idxs = topk_idxs.unbind(dim=1)

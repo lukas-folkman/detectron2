@@ -76,7 +76,16 @@ def find_top_rpn_proposals(
         else:
             num_proposals_i = min(Hi_Wi_A, pre_nms_topk)
 
+        if logits_i.device.type == 'mps':
+            orig_device = logits_i.device
+            logits_i = logits_i.to('cpu')
+        else:
+            orig_device = None
         topk_scores_i, topk_idx = logits_i.topk(num_proposals_i, dim=1)
+        if orig_device is not None:
+            # logits_i = logits_i.to(orig_device) # not use anymore
+            topk_scores_i = topk_scores_i.to(orig_device)
+            topk_idx = topk_idx.to(orig_device)
 
         # each is N x topk
         topk_proposals_i = proposals_i[batch_idx[:, None], topk_idx]  # N x topk x 4
