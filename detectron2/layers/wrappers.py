@@ -101,10 +101,16 @@ class Conv2d(torch.nn.Conv2d):
         """
         norm = kwargs.pop("norm", None)
         activation = kwargs.pop("activation", None)
+        dropout = kwargs.pop("dropout", None)
         super().__init__(*args, **kwargs)
 
         self.norm = norm
         self.activation = activation
+        if dropout:
+            self.dropout = torch.nn.Dropout(dropout)
+            print(f'DEBUG: APPLY DROPOUT {dropout} for kernel {self.kernel_size}')
+        else:
+            self.dropout = None
 
     def forward(self, x):
         # torchscript does not support SyncBatchNorm yet
@@ -131,6 +137,8 @@ class Conv2d(torch.nn.Conv2d):
             x = self.norm(x)
         if self.activation is not None:
             x = self.activation(x)
+        if self.dropout:
+            x = self.dropout(x)
         return x
 
 

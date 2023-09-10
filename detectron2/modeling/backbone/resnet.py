@@ -35,7 +35,7 @@ class BasicBlock(CNNBlockBase):
     with two 3x3 conv layers and a projection shortcut if needed.
     """
 
-    def __init__(self, in_channels, out_channels, *, stride=1, norm="BN"):
+    def __init__(self, in_channels, out_channels, *, stride=1, norm="BN", dropout=None):
         """
         Args:
             in_channels (int): Number of input channels.
@@ -66,6 +66,7 @@ class BasicBlock(CNNBlockBase):
             padding=1,
             bias=False,
             norm=get_norm(norm, out_channels),
+            dropout=dropout
         )
 
         self.conv2 = Conv2d(
@@ -76,6 +77,7 @@ class BasicBlock(CNNBlockBase):
             padding=1,
             bias=False,
             norm=get_norm(norm, out_channels),
+            dropout=dropout
         )
 
         for layer in [self.conv1, self.conv2, self.shortcut]:
@@ -115,6 +117,7 @@ class BottleneckBlock(CNNBlockBase):
         norm="BN",
         stride_in_1x1=False,
         dilation=1,
+        dropout=None
     ):
         """
         Args:
@@ -165,6 +168,7 @@ class BottleneckBlock(CNNBlockBase):
             groups=num_groups,
             dilation=dilation,
             norm=get_norm(norm, bottleneck_channels),
+            dropout=dropout
         )
 
         self.conv3 = Conv2d(
@@ -333,7 +337,7 @@ class BasicStem(CNNBlockBase):
     with a conv, relu and max_pool.
     """
 
-    def __init__(self, in_channels=3, out_channels=64, norm="BN"):
+    def __init__(self, in_channels=3, out_channels=64, norm="BN", dropout=None):
         """
         Args:
             norm (str or callable): norm after the first conv layer.
@@ -349,6 +353,7 @@ class BasicStem(CNNBlockBase):
             padding=3,
             bias=False,
             norm=get_norm(norm, out_channels),
+            dropout=dropout
         )
         weight_init.c2_msra_fill(self.conv1)
 
@@ -620,10 +625,12 @@ def build_resnet_backbone(cfg, input_shape):
     """
     # need registration of new blocks/stems?
     norm = cfg.MODEL.RESNETS.NORM
+    dropout = cfg.MODEL.RESNETS.DROPOUT
     stem = BasicStem(
         in_channels=input_shape.channels,
         out_channels=cfg.MODEL.RESNETS.STEM_OUT_CHANNELS,
         norm=norm,
+        dropout=dropout
     )
 
     # fmt: off
@@ -671,6 +678,7 @@ def build_resnet_backbone(cfg, input_shape):
             "in_channels": in_channels,
             "out_channels": out_channels,
             "norm": norm,
+            "dropout": dropout,
         }
         # Use BasicBlock for R18 and R34.
         if depth in [18, 34]:
@@ -684,6 +692,7 @@ def build_resnet_backbone(cfg, input_shape):
                 stage_kargs["block_class"] = DeformBottleneckBlock
                 stage_kargs["deform_modulated"] = deform_modulated
                 stage_kargs["deform_num_groups"] = deform_num_groups
+                stage_kargs.pop("dropout") # dropout for deformable not implemented yet
             else:
                 stage_kargs["block_class"] = BottleneckBlock
         blocks = ResNet.make_stage(**stage_kargs)
