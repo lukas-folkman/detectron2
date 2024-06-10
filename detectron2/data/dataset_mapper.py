@@ -1,6 +1,8 @@
 # Copyright (c) Facebook, Inc. and its affiliates.
 import copy
 import logging
+import sys
+
 import numpy as np
 from typing import List, Optional, Union
 import torch
@@ -9,6 +11,7 @@ from detectron2.config import configurable
 
 from . import detection_utils as utils
 from . import transforms as T
+from .transforms.copy_paste_augm import CopyPasteAugmentation
 
 """
 This file contains the default mapping that's applied to "dataset dicts".
@@ -85,6 +88,19 @@ class DatasetMapper:
     @classmethod
     def from_config(cls, cfg, is_train: bool = True):
         augs = utils.build_augmentation(cfg, is_train)
+
+        # LF COPY-PASTE
+        if cfg.INPUT.COPY_PASTE.ENABLED and is_train:
+            assert not cfg.MODEL.MASK_ON
+            augs.insert(0, CopyPasteAugmentation(
+                cp_type=cfg.INPUT.COPY_PASTE.TYPE,
+                n_objects=cfg.INPUT.COPY_PASTE.N_OBJECTS,
+                max_ioa=cfg.INPUT.COPY_PASTE.MAX_IOA,
+                json_fn=cfg.INPUT.COPY_PASTE.JSON_FN,
+                img_dir=cfg.INPUT.COPY_PASTE.IMG_DIR,
+                seed=cfg.SEED
+            ))
+
         if cfg.INPUT.CROP.ENABLED and is_train:
             augs.insert(0, T.RandomCrop(cfg.INPUT.CROP.TYPE, cfg.INPUT.CROP.SIZE))
             recompute_boxes = cfg.MODEL.MASK_ON
@@ -120,6 +136,10 @@ class DatasetMapper:
             if not self.use_keypoint:
                 anno.pop("keypoints", None)
 
+        for t in transforms:
+            if hasattr(t, 'apply_annotations') and not isinstance(t, T.NoOpTransform):
+                dataset_dict["annotations"] = t.apply_annotations(dataset_dict["annotations"])
+
         # USER: Implement additional transformations if you have other types of data
         annos = [
             utils.transform_instance_annotations(
@@ -128,6 +148,7 @@ class DatasetMapper:
             for obj in dataset_dict.pop("annotations")
             if obj.get("iscrowd", 0) == 0
         ]
+
         instances = utils.annotations_to_instances(
             annos, image_shape, mask_format=self.instance_mask_format
         )
@@ -160,7 +181,8 @@ class DatasetMapper:
         else:
             sem_seg_gt = None
 
-        aug_input = T.AugInput(image, sem_seg=sem_seg_gt)
+        boxes = np.asarray([utils.get_bbox(ann) for ann in dataset_dict['annotations']]).astype(np.float32)
+        aug_input = T.AugInput(image, boxes=boxes, sem_seg=sem_seg_gt)
         transforms = self.augmentations(aug_input)
         image, sem_seg_gt = aug_input.image, aug_input.sem_seg
 
